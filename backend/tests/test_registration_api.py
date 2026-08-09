@@ -22,9 +22,15 @@ async def test_registration_creates_one_projection_and_one_vault_file(tmp_path: 
     """A duplicate producer key returns the original resource without another file."""
 
     raw_token = "test-producer-token"
+    viewer_token = "test-viewer-token"
     token_file = tmp_path / "tokens.json"
     token_file.write_text(
-        json.dumps([{"hash": hashlib.sha256(raw_token.encode()).hexdigest(), "scope": "producer"}]),
+        json.dumps(
+            [
+                {"hash": hashlib.sha256(raw_token.encode()).hexdigest(), "scope": "producer"},
+                {"hash": hashlib.sha256(viewer_token.encode()).hexdigest(), "scope": "viewer"},
+            ]
+        ),
         encoding="utf-8",
     )
     os.chmod(token_file, 0o600)
@@ -50,13 +56,26 @@ async def test_registration_creates_one_projection_and_one_vault_file(tmp_path: 
             replay = await client.post(
                 "/api/v1/messages", json=payload, headers={"Authorization": f"Bearer {raw_token}"}
             )
+            public_id = first.json()["public_id"]
+            viewer_headers = {"Authorization": f"Bearer {viewer_token}"}
+            listed = await client.get("/api/v1/messages", headers=viewer_headers)
+            marked_read = await client.post(
+                f"/api/v1/messages/{public_id}/read", headers=viewer_headers
+            )
+            detail = await client.get(f"/api/v1/messages/{public_id}", headers=viewer_headers)
+            deleted = await client.delete(f"/api/v1/messages/{public_id}", headers=viewer_headers)
+            listed_after_delete = await client.get("/api/v1/messages", headers=viewer_headers)
 
     assert first.status_code == 201
     assert replay.status_code == 200
     assert replay.headers["X-Idempotent-Replay"] == "true"
     assert replay.json() == first.json()
-    public_id = first.json()["public_id"]
-    assert list(vault_root.rglob(f"{public_id}.md"))
+    assert listed.status_code == 200
+    assert marked_read.status_code == 204
+    assert detail.json()["read_at"] is not None
+    assert deleted.status_code == 204
+    assert listed_after_delete.json() == []
+    assert list((vault_root / ".trash").rglob(f"{public_id}.md"))
 
     engine = create_database_engine(settings.database_dsn)
     try:

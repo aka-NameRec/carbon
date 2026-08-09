@@ -113,6 +113,62 @@ class VaultStorage:
             ) from error
         return relative_path
 
+    def rewrite(self, relative_path: Path, message: VaultMessage) -> bytes:
+        """Atomically replace an existing file and return its exact prior bytes."""
+
+        target = self._root / relative_path
+        previous = target.read_bytes()
+        self._write_target(target, render_markdown(message).encode("utf-8"))
+        return previous
+
+    def restore(self, relative_path: Path, payload: bytes) -> None:
+        """Restore a previously captured file after a failed DB commit."""
+
+        self._write_target(self._root / relative_path, payload)
+
+    def move_to_trash(self, relative_path: Path) -> Path:
+        """Atomically move an active file into its received-time trash location."""
+
+        source = self._root / relative_path
+        target = self._root / ".trash" / relative_path
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.replace(source, target)
+        self._sync_directory(source.parent)
+        self._sync_directory(target.parent)
+        return Path(".trash") / relative_path
+
+    def restore_from_trash(self, relative_path: Path) -> None:
+        """Move a file back from trash to its active path after failed DB commit."""
+
+        source = self._root / ".trash" / relative_path
+        target = self._root / relative_path
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.replace(source, target)
+        self._sync_directory(source.parent)
+        self._sync_directory(target.parent)
+
+    def _write_target(self, target: Path, payload: bytes) -> None:
+        """Write bytes with the same atomic durability guarantees as a new file."""
+
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        temp_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb", prefix=".carbon-tmp-", suffix=".tmp", dir=target.parent, delete=False
+            ) as temp_file:
+                temp_path = Path(temp_file.name)
+                os.chmod(temp_path, 0o600)
+                temp_file.write(payload)
+                temp_file.flush()
+                os.fsync(temp_file.fileno())
+            os.replace(temp_path, target)
+            os.chmod(target, 0o600)
+            self._sync_directory(target.parent)
+        except OSError as error:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
+            raise OSError(f"unable to atomically write Carbon vault file {target}") from error
+
     @staticmethod
     def _sync_directory(directory: Path) -> None:
         descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)

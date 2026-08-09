@@ -27,6 +27,7 @@ class PendingMessage:
     received_at: datetime
     content_hash: str
     created: bool
+    row: dict[str, object] | None = None
 
     async def commit(self) -> None:
         """Commit the reserved projection row."""
@@ -50,6 +51,105 @@ class MessageRepository:
 
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
+
+    async def list_active(self) -> list[dict[str, object]]:
+        """Return active messages in the default stable order."""
+
+        async with self._engine.connect() as connection:
+            result = await connection.execute(
+                text("""
+                SELECT public_id, source, title, occurred_at, received_at, read_at, tags
+                FROM messages
+                WHERE deleted_at IS NULL
+                ORDER BY received_at DESC, public_id DESC
+                """)
+            )
+            return [dict(row._mapping) for row in result]
+
+    async def get_active(self, public_id: str) -> dict[str, object] | None:
+        """Return one active message by its public identifier."""
+
+        async with self._engine.connect() as connection:
+            result = await connection.execute(
+                text("""
+                SELECT public_id, source, source_event_id, title, occurred_at, received_at,
+                       read_at, tags, body_markdown
+                FROM messages
+                WHERE public_id = :public_id AND deleted_at IS NULL
+                """),
+                {"public_id": public_id},
+            )
+            row = result.mappings().one_or_none()
+            return dict(row) if row is not None else None
+
+    async def set_read_state(self, public_id: str, read: bool) -> bool:
+        """Update read state for an active projection row."""
+
+        async with self._engine.begin() as connection:
+            result = await connection.execute(
+                text("""
+                UPDATE messages
+                SET read_at = CASE WHEN :read THEN CURRENT_TIMESTAMP ELSE NULL END
+                WHERE public_id = :public_id AND deleted_at IS NULL
+                """),
+                {"public_id": public_id, "read": read},
+            )
+            return result.rowcount == 1
+
+    async def lock_active(self, public_id: str) -> PendingMessage | None:
+        """Lock an active row for a filesystem-coordinated lifecycle operation."""
+
+        connection = await self._engine.connect()
+        transaction = await connection.begin()
+        result = await connection.execute(
+            text("""
+            SELECT public_id, source, source_event_id, title, occurred_at, received_at, read_at,
+                   deduplication_key, tags, file_path, body_markdown, content_hash, schema_version
+            FROM messages
+            WHERE public_id = :public_id AND deleted_at IS NULL
+            FOR UPDATE
+            """),
+            {"public_id": public_id},
+        )
+        row = result.one_or_none()
+        if row is None:
+            await transaction.rollback()
+            await connection.close()
+            return None
+        return PendingMessage(
+            connection,
+            transaction,
+            row.public_id,
+            row.received_at,
+            row.content_hash,
+            True,
+            dict(row._mapping),
+        )
+
+    async def update_lifecycle(
+        self,
+        pending: PendingMessage,
+        *,
+        read_at: datetime | None,
+        deleted_at: datetime | None,
+        file_path: str,
+    ) -> None:
+        """Update a row already locked by ``lock_active`` in its open transaction."""
+
+        assert pending.connection is not None
+        await pending.connection.execute(
+            text("""
+            UPDATE messages
+            SET read_at = :read_at, deleted_at = :deleted_at, file_path = :file_path
+            WHERE public_id = :public_id
+            """),
+            {
+                "public_id": pending.public_id,
+                "read_at": read_at,
+                "deleted_at": deleted_at,
+                "file_path": file_path,
+            },
+        )
 
     async def reserve(self, message: ProducerMessage, received_at: datetime) -> PendingMessage:
         """Insert a projection row before its vault file is written."""
