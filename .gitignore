@@ -4,10 +4,19 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+*.tsbuildinfo
+frontend/src-tauri/target/
+frontend/src-tauri/gen/
 
 # Node.js
 node_modules/
 dist/
+
+# Frontend tooling and test outputs
+frontend/.vite/
+frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
 
 # Local secrets
 .env

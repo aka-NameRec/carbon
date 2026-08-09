@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 
 import { api, type Message } from './api'
 import MessageDetail from './components/MessageDetail.vue'
 import MessageList from './components/MessageList.vue'
+import { listenForDeepLinks, notifyAboutNewMessage, setTrayState } from './desktop'
 
 const queryClient = useQueryClient()
 const query = ref('')
 const selectedId = ref<string | null>(null)
+let unlistenDeepLinks: () => void = () => undefined
 
 const list = useQuery({ queryKey: ['messages'], queryFn: api.list })
 const search = useQuery({
@@ -25,6 +27,19 @@ const detail = useQuery({
   enabled: computed(() => selectedId.value !== null),
 })
 const selectedMessage = computed<Message | undefined>(() => detail.data.value)
+
+watch(
+  [() => list.data.value, () => list.isError.value],
+  ([messages, hasError]) => {
+    const state = hasError
+      ? 'error'
+      : messages?.some((message) => !message.read_at)
+        ? 'unread'
+        : 'idle'
+    void setTrayState(state).catch(() => undefined)
+  },
+  { immediate: true },
+)
 
 const refresh = () => queryClient.invalidateQueries({ queryKey: ['messages'] })
 const action = useMutation({
@@ -45,11 +60,23 @@ function remove(message: Message) {
 onMounted(() => {
   const baseUrl = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000/api/v1'
   const events = new EventSource(`${baseUrl}/events`)
-  for (const type of ['message.created', 'message.read', 'message.unread', 'message.deleted']) {
+  events.addEventListener('message.created', () => {
+    refresh()
+    void notifyAboutNewMessage()
+  })
+  for (const type of ['message.read', 'message.unread', 'message.deleted']) {
     events.addEventListener(type, refresh)
   }
   events.onerror = refresh
+
+  void listenForDeepLinks((id) => {
+    selectedId.value = id
+  }).then((unlisten) => {
+    unlistenDeepLinks = unlisten
+  })
 })
+
+onUnmounted(() => unlistenDeepLinks())
 </script>
 
 <template>
