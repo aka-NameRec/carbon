@@ -1,46 +1,59 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+import { useRoute, useRouter } from 'vue-router'
 
-import { api, type Message } from './api'
+import { api, type MessageFilters } from './api'
 import MessageDetail from './components/MessageDetail.vue'
 import MessageList from './components/MessageList.vue'
-import { listenForDeepLinks, notifyAboutNewMessage, setTrayState } from './desktop'
+import {
+  listenForDeepLinks,
+  listenForNotificationActions,
+  notifyAboutNewMessage,
+  openExternalUrl,
+  setTrayState,
+} from './desktop'
 
 const queryClient = useQueryClient()
+const route = useRoute()
+const router = useRouter()
 const query = ref('')
-const selectedId = ref<string | null>(null)
+const source = ref('')
+const unreadOnly = ref(false)
+const selectedId = ref<string | null>(
+  typeof route.params.publicId === 'string' ? route.params.publicId : null,
+)
 let unlistenDeepLinks: () => void = () => undefined
+let unlistenNotificationActions: () => void = () => undefined
+let events: EventSource | undefined
 
-const list = useQuery({ queryKey: ['messages'], queryFn: api.list })
+const filters = computed<MessageFilters>(() => ({
+  source: source.value || undefined,
+  unread: unreadOnly.value || undefined,
+}))
+const list = useInfiniteQuery({
+  queryKey: ['messages', filters],
+  initialPageParam: null as string | null,
+  queryFn: ({ pageParam }) => api.list(filters.value, pageParam),
+  getNextPageParam: (page) => page.next_cursor,
+})
 const search = useQuery({
   queryKey: ['search', query],
-  queryFn: () => (query.value ? api.search(query.value) : Promise.resolve({ items: [] })),
+  queryFn: () => api.search(query.value),
   enabled: computed(() => query.value.length > 0),
 })
-const items = computed(() =>
-  query.value ? (search.data.value?.items ?? []) : (list.data.value ?? []),
-)
+const listItems = computed(() => list.data.value?.pages.flatMap((page) => page.items) ?? [])
+const items = computed(() => (query.value ? (search.data.value?.items ?? []) : listItems.value))
+const unreadCount = computed(() => list.data.value?.pages[0]?.unread_count ?? 0)
+const listHasError = computed(() => list.isError.value || search.isError.value)
+const hasNextPage = computed(() => list.hasNextPage.value)
+const isFetchingNextPage = computed(() => list.isFetchingNextPage.value)
 const detail = useQuery({
   queryKey: ['message', selectedId],
   queryFn: () => api.detail(selectedId.value!),
   enabled: computed(() => selectedId.value !== null),
 })
-const selectedMessage = computed<Message | undefined>(() => detail.data.value)
-
-watch(
-  [() => list.data.value, () => list.isError.value],
-  ([messages, hasError]) => {
-    const state = hasError
-      ? 'error'
-      : messages?.some((message) => !message.read_at)
-        ? 'unread'
-        : 'idle'
-    void setTrayState(state).catch(() => undefined)
-  },
-  { immediate: true },
-)
-
+const selectedMessage = computed(() => detail.data.value)
 const refresh = () => queryClient.invalidateQueries({ queryKey: ['messages'] })
 const action = useMutation({
   mutationFn: ({ id, kind }: { id: string; kind: 'read' | 'unread' | 'delete' }) =>
@@ -48,46 +61,100 @@ const action = useMutation({
   onSuccess: refresh,
 })
 
-function toggleRead(message: Message) {
-  action.mutate({ id: message.public_id, kind: message.read_at ? 'unread' : 'read' })
+watch(
+  [unreadCount, () => list.isError.value],
+  ([count, hasError]) => {
+    void setTrayState(hasError ? 'error' : count > 0 ? 'unread' : 'idle').catch(() => undefined)
+  },
+  { immediate: true },
+)
+watch(
+  () => route.params.publicId,
+  (publicId) => {
+    selectedId.value = typeof publicId === 'string' ? publicId : null
+  },
+)
+
+function selectMessage(id: string): void {
+  void router.push({ name: 'message', params: { publicId: id } })
 }
 
-function remove(message: Message) {
-  action.mutate({ id: message.public_id, kind: 'delete' })
-  selectedId.value = null
+function toggleRead(): void {
+  if (detail.data.value) {
+    action.mutate({
+      id: detail.data.value.public_id,
+      kind: detail.data.value.read_at ? 'unread' : 'read',
+    })
+  }
+}
+
+function remove(): void {
+  if (detail.data.value) {
+    action.mutate({ id: detail.data.value.public_id, kind: 'delete' })
+    void router.push('/')
+  }
 }
 
 onMounted(() => {
   const baseUrl = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000/api/v1'
-  const events = new EventSource(`${baseUrl}/events`)
-  events.addEventListener('message.created', () => {
+  events = new EventSource(`${baseUrl}/events`)
+  events.addEventListener('message.created', (event) => {
     refresh()
-    void notifyAboutNewMessage()
+    const payload = JSON.parse((event as MessageEvent<string>).data) as { public_id?: string }
+    if (payload.public_id) void notifyAboutNewMessage(payload.public_id)
   })
-  for (const type of ['message.read', 'message.unread', 'message.deleted']) {
+  for (const type of ['message.read', 'message.unread', 'message.deleted', 'message.updated']) {
     events.addEventListener(type, refresh)
   }
   events.onerror = refresh
-
-  void listenForDeepLinks((id) => {
-    selectedId.value = id
-  }).then((unlisten) => {
+  void listenForDeepLinks(selectMessage).then((unlisten) => {
     unlistenDeepLinks = unlisten
+  })
+  void listenForNotificationActions(selectMessage).then((unlisten) => {
+    unlistenNotificationActions = unlisten
   })
 })
 
-onUnmounted(() => unlistenDeepLinks())
+onUnmounted(() => {
+  events?.close()
+  unlistenDeepLinks()
+  unlistenNotificationActions()
+})
 </script>
 
 <template>
   <main>
     <header>
       <h1>Carbon</h1>
-      <input v-model="query" placeholder="Search messages" />
+      <input
+        v-model="query"
+        type="search"
+        placeholder="Search messages"
+        aria-label="Search messages"
+      />
+      <input v-model="source" placeholder="Filter by source" aria-label="Filter by source" />
+      <label><input v-model="unreadOnly" type="checkbox" /> Unread only ({{ unreadCount }})</label>
     </header>
+    <p v-if="listHasError" class="error" role="alert">
+      Unable to load messages. Check the Carbon backend connection and try again.
+    </p>
     <section>
-      <MessageList :items="items" :selected-id="selectedId" @select="selectedId = $event" />
-      <MessageDetail :message="selectedMessage" @read="toggleRead" @remove="remove" />
+      <div>
+        <MessageList :items="items" :selected-id="selectedId" @select="selectMessage" />
+        <button
+          v-if="!query && hasNextPage"
+          :disabled="isFetchingNextPage"
+          @click="list.fetchNextPage()"
+        >
+          {{ isFetchingNextPage ? 'Loading…' : 'Load more' }}
+        </button>
+      </div>
+      <MessageDetail
+        :message="selectedMessage"
+        @read="toggleRead"
+        @remove="remove"
+        @open-external="(url) => void openExternalUrl(url)"
+      />
     </section>
   </main>
 </template>
@@ -100,16 +167,24 @@ main {
 }
 header {
   display: flex;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
   align-items: center;
 }
 input {
-  flex: 1;
   padding: 0.7rem;
 }
 section {
   display: grid;
   grid-template-columns: 40% 1fr;
   gap: 1rem;
+}
+.error {
+  color: #b91c1c;
+}
+@media (max-width: 700px) {
+  section {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

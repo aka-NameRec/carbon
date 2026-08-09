@@ -1,4 +1,9 @@
 import { createApp } from 'vue'
+import { RouterView } from 'vue-router'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
-import App from './App.vue'
-createApp(App).use(VueQueryPlugin, { queryClient: new QueryClient() }).mount('#app')
+import { router } from './router'
+
+createApp(RouterView)
+  .use(VueQueryPlugin, { queryClient: new QueryClient() })
+  .use(router)
+  .mount('#app')

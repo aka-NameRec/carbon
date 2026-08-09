@@ -54,6 +54,14 @@ class SearchResponse(BaseModel):
     next_cursor: str | None
 
 
+class MessageListResponse(BaseModel):
+    """Cursor page of active messages and the global unread indicator."""
+
+    items: list[MessageSummary]
+    next_cursor: str | None
+    unread_count: int
+
+
 def producer_principal(
     request: Request, authorization: str | None = Header(default=None)
 ) -> TokenPrincipal:
@@ -124,14 +132,26 @@ async def search_messages(
     return SearchResponse(items=items, next_cursor=next_cursor)
 
 
-@router.get("", response_model=list[MessageSummary])
-async def list_messages(request: Request, _: ViewerPrincipal) -> list[MessageSummary]:
-    """List active messages in default received-time order."""
+@router.get("", response_model=MessageListResponse)
+async def list_messages(
+    request: Request,
+    _: ViewerPrincipal,
+    limit: int = Query(default=50, ge=1, le=100),
+    cursor: str | None = None,
+    source: str | None = Query(default=None, min_length=1, max_length=32),
+    unread: bool | None = None,
+) -> MessageListResponse:
+    """List one filtered active-message cursor page."""
 
-    return [
-        MessageSummary.model_validate(item)
-        for item in await MessageRepository(request.app.state.engine).list_active()
-    ]
+    received_at, public_id = _decode_cursor(cursor)
+    repository = MessageRepository(request.app.state.engine)
+    rows = await repository.list_active(limit, received_at, public_id, source, unread)
+    items = [MessageSummary.model_validate(item) for item in rows]
+    return MessageListResponse(
+        items=items,
+        next_cursor=_encode_cursor(items[-1]) if len(items) == limit else None,
+        unread_count=await repository.unread_count(),
+    )
 
 
 @router.get("/{public_id}", response_model=MessageDetail)

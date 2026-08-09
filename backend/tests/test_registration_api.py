@@ -101,7 +101,7 @@ async def test_registration_creates_one_projection_and_one_vault_file(tmp_path: 
     assert marked_read.status_code == 204
     assert detail.json()["read_at"] is not None
     assert deleted.status_code == 204
-    assert public_id not in {item["public_id"] for item in listed_after_delete.json()}
+    assert public_id not in {item["public_id"] for item in listed_after_delete.json()["items"]}
     assert list((vault_root / ".trash").rglob(f"{public_id}.md"))
 
     engine = create_database_engine(settings.database_dsn)

@@ -96,8 +96,15 @@ class MessageRepository:
             )
             return bool(result.scalar_one())
 
-    async def list_active(self) -> list[dict[str, object]]:
-        """Return active messages in the default stable order."""
+    async def list_active(
+        self,
+        limit: int,
+        cursor_received_at: datetime | None,
+        cursor_public_id: str | None,
+        source: str | None,
+        unread: bool | None,
+    ) -> list[dict[str, object]]:
+        """Return one filtered active-message page in stable order."""
 
         async with self._engine.connect() as connection:
             result = await connection.execute(
@@ -105,10 +112,34 @@ class MessageRepository:
                 SELECT public_id, source, title, occurred_at, received_at, read_at, tags
                 FROM messages
                 WHERE deleted_at IS NULL
+                  AND (CAST(:source AS text) IS NULL OR source = CAST(:source AS text))
+                  AND (CAST(:unread AS boolean) IS NULL
+                       OR (read_at IS NULL) = CAST(:unread AS boolean))
+                  AND (CAST(:cursor_received_at AS timestamptz) IS NULL
+                       OR (received_at, public_id) <
+                          (CAST(:cursor_received_at AS timestamptz),
+                           CAST(:cursor_public_id AS text)))
                 ORDER BY received_at DESC, public_id DESC
-                """)
+                LIMIT :limit
+                """),
+                {
+                    "limit": limit,
+                    "cursor_received_at": cursor_received_at,
+                    "cursor_public_id": cursor_public_id,
+                    "source": source,
+                    "unread": unread,
+                },
             )
             return [dict(row._mapping) for row in result]
+
+    async def unread_count(self) -> int:
+        """Return the number of active unread messages."""
+
+        async with self._engine.connect() as connection:
+            result = await connection.execute(
+                text("SELECT count(*) FROM messages WHERE deleted_at IS NULL AND read_at IS NULL")
+            )
+            return int(result.scalar_one())
 
     async def search_active(
         self,

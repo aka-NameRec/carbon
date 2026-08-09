@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { messageIdFromUrl } from './desktop'
+import { messageIdFromUrl, openExternalUrl } from './desktop'
 
 describe('messageIdFromUrl', () => {
   it('accepts a Carbon message deep link', () => {
@@ -16,5 +16,13 @@ describe('messageIdFromUrl', () => {
     'not a URL',
   ])('rejects an invalid deep link: %s', (url) => {
     expect(messageIdFromUrl(url)).toBeNull()
+  })
+})
+
+describe('openExternalUrl', () => {
+  it('rejects a blocked URI scheme before opening it', async () => {
+    await expect(openExternalUrl('javascript:alert(1)')).rejects.toThrow(
+      'Blocked external URI scheme',
+    )
   })
 })

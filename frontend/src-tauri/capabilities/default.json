@@ -2,5 +2,5 @@
   "identifier": "default",
   "description": "Carbon desktop permissions",
   "windows": ["main"],
-  "permissions": ["core:default", "deep-link:default", "notification:default"]
+  "permissions": ["core:default", "deep-link:default", "notification:default", "opener:default"]
 }
