@@ -58,13 +58,14 @@ async def test_registration_creates_one_projection_and_one_vault_file(tmp_path: 
             replay = await client.post(
                 "/api/v1/messages", json=payload, headers={"Authorization": f"Bearer {raw_token}"}
             )
+            russian_deduplication_key = f"test-{uuid4().hex}"
             russian = await client.post(
                 "/api/v1/messages",
                 json={
                     **payload,
                     "source": "tg-mon",
-                    "title": "Новое уведомление",
-                    "deduplication_key": f"test-{uuid4().hex}",
+                    "title": f"Новое уведомление {russian_deduplication_key}",
+                    "deduplication_key": russian_deduplication_key,
                 },
                 headers={"Authorization": f"Bearer {raw_token}"},
             )

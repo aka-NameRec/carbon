@@ -16,12 +16,14 @@ from fastapi import FastAPI, Request, Response
 from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.middleware.base import RequestResponseEndpoint
 
+from carbon_backend.api.events import router as events_router
 from carbon_backend.api.health import router as health_router
 from carbon_backend.api.messages import router as messages_router
 from carbon_backend.auth.tokens import create_token
 from carbon_backend.config import Settings, get_settings
 from carbon_backend.database import create_database_engine
 from carbon_backend.errors import ApiError, api_error_handler
+from carbon_backend.events import EventBroker
 from carbon_backend.logging import configure_logging
 from carbon_backend.repositories.messages import MessageRepository
 from carbon_backend.services.rebuild import RebuildReport, rebuild_projection, scan_vault
@@ -40,6 +42,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine: AsyncEngine = create_database_engine(runtime_settings.database_dsn)
         application.state.settings = runtime_settings
         application.state.engine = engine
+        application.state.event_broker = EventBroker()
         logger.info("application_started")
         try:
             yield
@@ -60,6 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application.include_router(health_router, prefix=runtime_settings.api_prefix)
     application.include_router(messages_router, prefix=runtime_settings.api_prefix)
+    application.include_router(events_router, prefix=runtime_settings.api_prefix)
     return application
 
 

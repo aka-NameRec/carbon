@@ -154,6 +154,7 @@ async def mark_read(public_id: str, request: Request, _: ViewerPrincipal) -> Res
     )
     if not await service.set_read_state(public_id, read=True):
         raise ApiError(status_code=404, code="not_found", message="Message was not found")
+    await request.app.state.event_broker.publish("message.read", public_id)
     return Response(status_code=204)
 
 
@@ -167,6 +168,7 @@ async def mark_unread(public_id: str, request: Request, _: ViewerPrincipal) -> R
     )
     if not await service.set_read_state(public_id, read=False):
         raise ApiError(status_code=404, code="not_found", message="Message was not found")
+    await request.app.state.event_broker.publish("message.unread", public_id)
     return Response(status_code=204)
 
 
@@ -180,6 +182,7 @@ async def delete_message(public_id: str, request: Request, _: ViewerPrincipal) -
     )
     if not await service.delete(public_id):
         raise ApiError(status_code=404, code="not_found", message="Message was not found")
+    await request.app.state.event_broker.publish("message.deleted", public_id)
     return Response(status_code=204)
 
 
@@ -213,4 +216,6 @@ async def register_message(
     if replay:
         response.status_code = 200
         response.headers["X-Idempotent-Replay"] = "true"
+    else:
+        await request.app.state.event_broker.publish("message.created", identifier)
     return RegistrationResponse(public_id=identifier)
