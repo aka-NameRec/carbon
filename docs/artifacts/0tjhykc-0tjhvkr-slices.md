@@ -110,10 +110,12 @@
 ### Слайс 9. Web frontend
 
 - Создать `carbon-frontend` на Vue 3, TypeScript strict, Vite, PrimeVue и TanStack Query.
+- Подключить Prettier для Vue, TypeScript, JSON и CSS; добавить команды format/format:check и исключить generated/local directories.
 - Реализовать master/detail layout, filters, search и deep links.
 - Реализовать sanitized Markdown rendering и URI allowlist.
 - Подключить read/unread/delete и SSE invalidation/refetch.
 - Добавить Vitest, Vue Test Utils и Playwright.
+- Разделить UI на читаемые компоненты; не оставлять сжатые или однострочные source-файлы.
 
 Результат: работающий web MVP.
 
@@ -135,4 +137,3 @@
 - Проверить Docker/PostgreSQL smoke test.
 
 Результат: подтверждённый MVP.
-
