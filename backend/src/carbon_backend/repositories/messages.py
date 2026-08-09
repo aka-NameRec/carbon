@@ -110,6 +110,49 @@ class MessageRepository:
             )
             return [dict(row._mapping) for row in result]
 
+    async def search_active(
+        self,
+        query: str,
+        limit: int,
+        cursor_received_at: datetime | None,
+        cursor_public_id: str | None,
+    ) -> list[dict[str, object]]:
+        """Search active messages with safe FTS and trigram fallback ranking."""
+
+        async with self._engine.connect() as connection:
+            result = await connection.execute(
+                text("""
+                WITH query_terms AS (
+                    SELECT websearch_to_tsquery('russian', :query) AS russian_query,
+                           websearch_to_tsquery('english', :query) AS english_query
+                )
+                SELECT m.public_id, m.source, m.title, m.occurred_at, m.received_at, m.read_at,
+                       m.tags,
+                       GREATEST(ts_rank_cd(m.search_vector, q.russian_query),
+                                ts_rank_cd(m.search_vector, q.english_query),
+                                similarity(m.title, :query),
+                                similarity(m.search_text, :query),
+                                similarity(m.source, :query)) AS score
+                FROM messages AS m CROSS JOIN query_terms AS q
+                WHERE m.deleted_at IS NULL
+                  AND (m.search_vector @@ q.russian_query OR m.search_vector @@ q.english_query
+                       OR m.title % :query OR m.search_text % :query OR m.source % :query)
+                  AND (CAST(:cursor_received_at AS timestamptz) IS NULL
+                       OR (m.received_at, m.public_id) <
+                          (CAST(:cursor_received_at AS timestamptz),
+                           CAST(:cursor_public_id AS text)))
+                ORDER BY score DESC, m.received_at DESC, m.public_id DESC
+                LIMIT :limit
+                """),
+                {
+                    "query": query,
+                    "limit": limit,
+                    "cursor_received_at": cursor_received_at,
+                    "cursor_public_id": cursor_public_id,
+                },
+            )
+            return [dict(row._mapping) for row in result]
+
     async def get_active(self, public_id: str) -> dict[str, object] | None:
         """Return one active message by its public identifier."""
 

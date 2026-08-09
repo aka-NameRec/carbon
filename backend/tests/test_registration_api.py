@@ -42,7 +42,7 @@ async def test_registration_creates_one_projection_and_one_vault_file(tmp_path: 
     deduplication_key = f"test-{uuid4().hex}"
     payload = {
         "source": "test-source",
-        "title": "Registration test",
+        "title": f"Registration test {deduplication_key}",
         "occurred_at": "2026-08-09T07:42:18Z",
         "body": "A **Markdown** body.",
         "deduplication_key": deduplication_key,
@@ -58,9 +58,28 @@ async def test_registration_creates_one_projection_and_one_vault_file(tmp_path: 
             replay = await client.post(
                 "/api/v1/messages", json=payload, headers={"Authorization": f"Bearer {raw_token}"}
             )
+            russian = await client.post(
+                "/api/v1/messages",
+                json={
+                    **payload,
+                    "source": "tg-mon",
+                    "title": "Новое уведомление",
+                    "deduplication_key": f"test-{uuid4().hex}",
+                },
+                headers={"Authorization": f"Bearer {raw_token}"},
+            )
             public_id = first.json()["public_id"]
             viewer_headers = {"Authorization": f"Bearer {viewer_token}"}
             listed = await client.get("/api/v1/messages", headers=viewer_headers)
+            search = await client.get(
+                "/api/v1/messages/search", params={"q": "Registration"}, headers=viewer_headers
+            )
+            russian_search = await client.get(
+                "/api/v1/messages/search", params={"q": "уведомления"}, headers=viewer_headers
+            )
+            trigram_search = await client.get(
+                "/api/v1/messages/search", params={"q": "tg-mo"}, headers=viewer_headers
+            )
             marked_read = await client.post(
                 f"/api/v1/messages/{public_id}/read", headers=viewer_headers
             )
@@ -70,21 +89,24 @@ async def test_registration_creates_one_projection_and_one_vault_file(tmp_path: 
 
     assert first.status_code == 201
     assert replay.status_code == 200
+    assert russian.status_code == 201
     assert replay.headers["X-Idempotent-Replay"] == "true"
     assert replay.json() == first.json()
     assert listed.status_code == 200
+    assert search.status_code == 200
+    assert search.json()["items"][0]["public_id"] == public_id
+    assert russian_search.json()["items"][0]["source"] == "tg-mon"
+    assert trigram_search.json()["items"][0]["source"] == "tg-mon"
     assert marked_read.status_code == 204
     assert detail.json()["read_at"] is not None
     assert deleted.status_code == 204
-    assert listed_after_delete.json() == []
+    assert public_id not in {item["public_id"] for item in listed_after_delete.json()}
     assert list((vault_root / ".trash").rglob(f"{public_id}.md"))
 
     engine = create_database_engine(settings.database_dsn)
     try:
         async with engine.begin() as connection:
-            await connection.execute(
-                text("DELETE FROM messages WHERE public_id = :public_id"), {"public_id": public_id}
-            )
+            await connection.execute(text("DELETE FROM messages WHERE source = 'test-source'"))
         report = await rebuild_projection(MessageRepository(engine), vault_root, dry_run=False)
         assert report.added == 1
         async with engine.connect() as connection:
@@ -94,8 +116,6 @@ async def test_registration_creates_one_projection_and_one_vault_file(tmp_path: 
             )
             assert restored.scalar_one() is not None
         async with engine.begin() as connection:
-            await connection.execute(
-                text("DELETE FROM messages WHERE public_id = :public_id"), {"public_id": public_id}
-            )
+            await connection.execute(text("DELETE FROM messages WHERE source = 'test-source'"))
     finally:
         await engine.dispose()

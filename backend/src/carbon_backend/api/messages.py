@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import base64
+import json
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Request, Response
+from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -45,6 +47,13 @@ class MessageDetail(MessageSummary):
     body_markdown: str
 
 
+class SearchResponse(BaseModel):
+    """Ranked search page with an opaque cursor."""
+
+    items: list[MessageSummary]
+    next_cursor: str | None
+
+
 def producer_principal(
     request: Request, authorization: str | None = Header(default=None)
 ) -> TokenPrincipal:
@@ -77,6 +86,42 @@ def viewer_principal(
 
 
 ViewerPrincipal = Annotated[TokenPrincipal, Depends(viewer_principal)]
+
+
+def _decode_cursor(value: str | None) -> tuple[datetime | None, str | None]:
+    if value is None:
+        return None, None
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(value.encode()).decode())
+        return datetime.fromisoformat(payload["received_at"]), payload["public_id"]
+    except (KeyError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ApiError(
+            status_code=422, code="validation_error", message="Cursor is invalid"
+        ) from error
+
+
+def _encode_cursor(item: MessageSummary) -> str:
+    payload = {"received_at": item.received_at.isoformat(), "public_id": item.public_id}
+    return base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode()
+
+
+@router.get("/search", response_model=SearchResponse)
+async def search_messages(
+    request: Request,
+    _: ViewerPrincipal,
+    q: str = Query(min_length=1, max_length=500),
+    limit: int = Query(default=50, ge=1, le=100),
+    cursor: str | None = None,
+) -> SearchResponse:
+    """Search active messages by FTS and trigram similarity."""
+
+    received_at, public_id = _decode_cursor(cursor)
+    rows = await MessageRepository(request.app.state.engine).search_active(
+        q, limit, received_at, public_id
+    )
+    items = [MessageSummary.model_validate(row) for row in rows]
+    next_cursor = _encode_cursor(items[-1]) if len(items) == limit else None
+    return SearchResponse(items=items, next_cursor=next_cursor)
 
 
 @router.get("", response_model=list[MessageSummary])
