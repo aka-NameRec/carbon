@@ -1,0 +1,25 @@
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node.js
+node_modules/
+dist/
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# AI tool local state and indexes
+.ai-standards/chroma/
+.ai-standards/state/
+.conport/
+.basic-memory/
+**/graphify-out/
+
+# Local service data
+context_portal/

@@ -1,0 +1,43 @@
+ai_standards_version = "2.1.0"
+project_version = "0.1.0"
+project_release_date = "2026-08-09"
+fragments = [
+  "core/base",
+  "core/git-workflow",
+  "core/architecture",
+  "core/error-handling",
+]
+features = [
+  "conport",
+  "basic-memory",
+  "chroma",
+  "design-first-collaboration",
+  "reasoning-hygiene",
+  "autonomy-boundaries",
+  "structured-artifacts",
+  "session-hygiene",
+  "agent-usage-hygiene",
+]
+stacks = [
+  "python",
+  "fastapi",
+  "sqlalchemy",
+  "postgres",
+  "typescript",
+  "vue",
+  "vue-query",
+  "vite",
+]
+local_overrides = [
+  "docs/ai/project-rules.md",
+]
+optional_local_overrides = [
+  "docs/ai/private-rules.local.md",
+]
+
+[tooling]
+agents = ["codex"]
+
+[metadata]
+project_name = "carbon"
+notes = "Carbon personal notification journal: carbon-backend and carbon-frontend."
