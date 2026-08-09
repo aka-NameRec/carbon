@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 from argparse import ArgumentParser
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from uuid import uuid4
 
 import uvicorn
@@ -20,6 +23,8 @@ from carbon_backend.config import Settings, get_settings
 from carbon_backend.database import create_database_engine
 from carbon_backend.errors import ApiError, api_error_handler
 from carbon_backend.logging import configure_logging
+from carbon_backend.repositories.messages import MessageRepository
+from carbon_backend.services.rebuild import RebuildReport, rebuild_projection, scan_vault
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +77,29 @@ def run() -> None:
     create_parser = token_subparsers.add_parser("create")
     create_parser.add_argument("--scope", choices=("producer", "viewer", "admin"), required=True)
     create_parser.add_argument("--source")
+    index_parser = subparsers.add_parser("index")
+    index_subparsers = index_parser.add_subparsers(dest="index_command")
+    rebuild_parser = index_subparsers.add_parser("rebuild")
+    rebuild_parser.add_argument("--dry-run", action="store_true")
     arguments = parser.parse_args()
     if arguments.command == "token" and arguments.token_command == "create":
         print(create_token(settings.token_file, arguments.scope, arguments.source))
+        return
+    if arguments.command == "index" and arguments.index_command == "rebuild":
+        if arguments.dry_run:
+            report = scan_vault(settings.vault_root)
+        else:
+
+            async def rebuild() -> RebuildReport:
+                engine = create_database_engine(settings.database_dsn)
+                try:
+                    return await rebuild_projection(
+                        MessageRepository(engine), settings.vault_root, False
+                    )
+                finally:
+                    await engine.dispose()
+
+            report = asyncio.run(rebuild())
+        print(json.dumps(asdict(report), ensure_ascii=False))
         return
     uvicorn.run(app, host=settings.bind_host, port=settings.bind_port)

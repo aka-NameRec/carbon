@@ -15,6 +15,8 @@ from sqlalchemy import text
 from carbon_backend.config import Settings
 from carbon_backend.database import create_database_engine
 from carbon_backend.main import create_app
+from carbon_backend.repositories.messages import MessageRepository
+from carbon_backend.services.rebuild import rebuild_projection
 
 
 @pytest.mark.integration
@@ -79,6 +81,18 @@ async def test_registration_creates_one_projection_and_one_vault_file(tmp_path: 
 
     engine = create_database_engine(settings.database_dsn)
     try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM messages WHERE public_id = :public_id"), {"public_id": public_id}
+            )
+        report = await rebuild_projection(MessageRepository(engine), vault_root, dry_run=False)
+        assert report.added == 1
+        async with engine.connect() as connection:
+            restored = await connection.execute(
+                text("SELECT deleted_at FROM messages WHERE public_id = :public_id"),
+                {"public_id": public_id},
+            )
+            assert restored.scalar_one() is not None
         async with engine.begin() as connection:
             await connection.execute(
                 text("DELETE FROM messages WHERE public_id = :public_id"), {"public_id": public_id}

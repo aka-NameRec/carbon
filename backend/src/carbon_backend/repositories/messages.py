@@ -15,6 +15,7 @@ from carbon_backend.domain.messages import (
     markdown_to_plain_text,
     public_id,
 )
+from carbon_backend.services.rebuild import VaultRecord
 
 
 @dataclass(slots=True)
@@ -51,6 +52,49 @@ class MessageRepository:
 
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
+
+    async def upsert_rebuild_record(self, record: VaultRecord) -> bool:
+        """Idempotently project one validated vault record; return true when inserted."""
+
+        data = record.data
+        async with self._engine.begin() as connection:
+            result = await connection.execute(
+                text("""
+                INSERT INTO messages (public_id, source, source_event_id, title, occurred_at,
+                    received_at, read_at, deleted_at, deduplication_key, tags, file_path,
+                    body_markdown, search_text, content_hash, schema_version, search_vector)
+                VALUES (:public_id, :source, :source_event_id, :title, :occurred_at,
+                    :received_at, :read_at, :deleted_at, :deduplication_key, :tags, :file_path,
+                    :body_markdown, :search_text, :content_hash, :schema_version, ''::tsvector)
+                ON CONFLICT (public_id) DO UPDATE SET source = EXCLUDED.source,
+                    source_event_id = EXCLUDED.source_event_id, title = EXCLUDED.title,
+                    occurred_at = EXCLUDED.occurred_at, received_at = EXCLUDED.received_at,
+                    read_at = EXCLUDED.read_at, deleted_at = EXCLUDED.deleted_at,
+                    deduplication_key = EXCLUDED.deduplication_key, tags = EXCLUDED.tags,
+                    file_path = EXCLUDED.file_path, body_markdown = EXCLUDED.body_markdown,
+                    search_text = EXCLUDED.search_text, content_hash = EXCLUDED.content_hash,
+                    schema_version = EXCLUDED.schema_version
+                RETURNING xmax = 0 AS inserted
+                """),
+                {
+                    "public_id": data["public_id"],
+                    "source": data["source"],
+                    "source_event_id": data.get("source_event_id"),
+                    "title": data["title"],
+                    "occurred_at": data["occurred_at"],
+                    "received_at": data["received_at"],
+                    "read_at": data.get("read_at"),
+                    "deleted_at": data.get("deleted_at") if record.deleted else None,
+                    "deduplication_key": data.get("deduplication_key"),
+                    "tags": data.get("tags", []),
+                    "file_path": str(record.relative_path),
+                    "body_markdown": record.body_markdown,
+                    "search_text": markdown_to_plain_text(record.body_markdown),
+                    "content_hash": data["content_hash"],
+                    "schema_version": data["schema_version"],
+                },
+            )
+            return bool(result.scalar_one())
 
     async def list_active(self) -> list[dict[str, object]]:
         """Return active messages in the default stable order."""
