@@ -71,6 +71,12 @@ class VaultStorage:
     def __init__(self, root: Path) -> None:
         self._root = root
 
+    @property
+    def root(self) -> Path:
+        """Return the configured notifications root."""
+
+        return self._root
+
     def relative_path(self, message: VaultMessage) -> Path:
         """Return the verified active relative path for a message."""
 

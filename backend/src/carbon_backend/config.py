@@ -22,6 +22,7 @@ class Settings(BaseSettings):
 
     database_dsn: str = "postgresql+psycopg://carbon@127.0.0.1:5433/carbon"
     vault_root: Path = Path("~/.my-links/logs-obsidian/carbon/Notifications")
+    token_file: Path = Path("~/.config/carbon/tokens.json")
     bind_host: str = "127.0.0.1"
     bind_port: int = Field(default=8000, ge=1, le=65535)
     log_level: str = "INFO"
@@ -34,9 +35,9 @@ class Settings(BaseSettings):
             raise ValueError("database_dsn must use the postgresql+psycopg dialect")
         return value
 
-    @field_validator("vault_root")
+    @field_validator("vault_root", "token_file")
     @classmethod
-    def normalize_vault_root(cls, value: Path) -> Path:
+    def normalize_path(cls, value: Path) -> Path:
         return value.expanduser().resolve()
 
     @field_validator("log_level")
