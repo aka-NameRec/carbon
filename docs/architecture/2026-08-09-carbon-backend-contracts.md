@@ -13,7 +13,7 @@
 - `deduplication_key`: optional producer event key; unique вместе с `source`, когда задан.
 - `public_id` и имя Markdown-файла не зависят от PostgreSQL `id`.
 
-`public_id` генерируется после нормализации входных данных. Hash строится из канонического JSON с `source`, `source_event_id`, `occurred_at`, `title`, `body`; алгоритм и fixtures фиксируются в Slice 3. Коллизия не разрешается молча: БД сохраняет уникальность, генератор повторяет попытку с детерминированным nonce.
+`public_id` генерируется после нормализации входных данных. Канонический JSON содержит отсортированные ключи `source`, `source_event_id`, `occurred_at`, `title`, `body`, использует UTF-8 без ASCII escaping и компактные separators. `content_hash` — полный SHA-256 этого представления; suffix `public_id` — последние восемь base36-разрядов SHA-256 с детерминированным nonce. Коллизия не разрешается молча: БД сохраняет уникальность, генератор повторяет попытку с детерминированным nonce.
 
 ## Producer API
 
