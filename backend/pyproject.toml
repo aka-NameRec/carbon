@@ -39,10 +39,12 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+  "integration: requires the local Carbon PostgreSQL instance after Alembic migration",
+]
 
 [tool.mypy]
 python_version = "3.14"
 strict = true
 files = ["src", "tests"]
 warn_unreachable = true
-
