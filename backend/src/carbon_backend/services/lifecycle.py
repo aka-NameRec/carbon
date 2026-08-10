@@ -27,14 +27,16 @@ class LifecycleService:
         assert row is not None
         read_at = datetime.now(UTC) if read else None
         relative_path = Path(cast(str, row["file_path"]))
-        previous = self._storage.rewrite(relative_path, self._message(pending, read_at, None))
+        previous: bytes | None = None
         try:
+            previous = self._storage.rewrite(relative_path, self._message(pending, read_at, None))
             await self._repository.update_lifecycle(
                 pending, read_at=read_at, deleted_at=None, file_path=str(relative_path)
             )
             await pending.commit()
         except Exception:
-            self._storage.restore(relative_path, previous)
+            if previous is not None:
+                self._storage.restore(relative_path, previous)
             await pending.rollback()
             raise
         return True
@@ -50,9 +52,14 @@ class LifecycleService:
         deleted_at = datetime.now(UTC)
         read_at = cast(datetime | None, row["read_at"])
         relative_path = Path(cast(str, row["file_path"]))
-        previous = self._storage.rewrite(relative_path, self._message(pending, read_at, deleted_at))
-        trash_path = self._storage.move_to_trash(relative_path)
+        previous: bytes | None = None
+        trashed = False
         try:
+            previous = self._storage.rewrite(
+                relative_path, self._message(pending, read_at, deleted_at)
+            )
+            trash_path = self._storage.move_to_trash(relative_path)
+            trashed = True
             await self._repository.update_lifecycle(
                 pending,
                 read_at=read_at,
@@ -61,8 +68,10 @@ class LifecycleService:
             )
             await pending.commit()
         except Exception:
-            self._storage.restore_from_trash(relative_path)
-            self._storage.restore(relative_path, previous)
+            if trashed:
+                self._storage.restore_from_trash(relative_path)
+            if previous is not None:
+                self._storage.restore(relative_path, previous)
             await pending.rollback()
             raise
         return True
