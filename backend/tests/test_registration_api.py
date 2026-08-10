@@ -70,6 +70,7 @@ async def test_registration_creates_one_projection_and_one_vault_file(tmp_path: 
                 headers={"Authorization": f"Bearer {raw_token}"},
             )
             public_id = first.json()["public_id"]
+            russian_public_id = russian.json()["public_id"]
             viewer_headers = {"Authorization": f"Bearer {viewer_token}"}
             listed = await client.get("/api/v1/messages", headers=viewer_headers)
             search = await client.get(
@@ -88,24 +89,24 @@ async def test_registration_creates_one_projection_and_one_vault_file(tmp_path: 
             deleted = await client.delete(f"/api/v1/messages/{public_id}", headers=viewer_headers)
             listed_after_delete = await client.get("/api/v1/messages", headers=viewer_headers)
 
-    assert first.status_code == 201
-    assert replay.status_code == 200
-    assert russian.status_code == 201
-    assert replay.headers["X-Idempotent-Replay"] == "true"
-    assert replay.json() == first.json()
-    assert listed.status_code == 200
-    assert search.status_code == 200
-    assert search.json()["items"][0]["public_id"] == public_id
-    assert russian_search.json()["items"][0]["source"] == "tg-mon"
-    assert trigram_search.json()["items"][0]["source"] == "tg-mon"
-    assert marked_read.status_code == 204
-    assert detail.json()["read_at"] is not None
-    assert deleted.status_code == 204
-    assert public_id not in {item["public_id"] for item in listed_after_delete.json()["items"]}
-    assert list((vault_root / ".trash").rglob(f"{public_id}.md"))
-
     engine = create_database_engine(settings.database_dsn)
     try:
+        assert first.status_code == 201
+        assert replay.status_code == 200
+        assert russian.status_code == 201
+        assert replay.headers["X-Idempotent-Replay"] == "true"
+        assert replay.json() == first.json()
+        assert listed.status_code == 200
+        assert search.status_code == 200
+        assert search.json()["items"][0]["public_id"] == public_id
+        assert russian_search.json()["items"][0]["source"] == "tg-mon"
+        assert trigram_search.json()["items"][0]["source"] == "tg-mon"
+        assert marked_read.status_code == 204
+        assert detail.json()["read_at"] is not None
+        assert deleted.status_code == 204
+        assert public_id not in {item["public_id"] for item in listed_after_delete.json()["items"]}
+        assert list((vault_root / ".trash").rglob(f"{public_id}.md"))
+
         async with engine.begin() as connection:
             await connection.execute(text("DELETE FROM messages WHERE source = 'test-source'"))
         report = await rebuild_projection(MessageRepository(engine), vault_root, dry_run=False)
@@ -116,7 +117,12 @@ async def test_registration_creates_one_projection_and_one_vault_file(tmp_path: 
                 {"public_id": public_id},
             )
             assert restored.scalar_one() is not None
-        async with engine.begin() as connection:
-            await connection.execute(text("DELETE FROM messages WHERE source = 'test-source'"))
     finally:
+        # Remove exactly the rows this test created (tg-mon is a real source, so delete
+        # by public_id, not by source) and run even if an assertion above failed.
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM messages WHERE public_id IN (:test_id, :russian_id)"),
+                {"test_id": public_id, "russian_id": russian_public_id},
+            )
         await engine.dispose()
