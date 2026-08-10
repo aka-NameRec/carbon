@@ -97,7 +97,11 @@ function remove(): void {
 
 onMounted(() => {
   const baseUrl = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000/api/v1'
-  events = new EventSource(`${baseUrl}/events`)
+  const viewerToken = import.meta.env.VITE_VIEWER_TOKEN ?? ''
+  const eventsUrl = viewerToken
+    ? `${baseUrl}/events?token=${encodeURIComponent(viewerToken)}`
+    : `${baseUrl}/events`
+  events = new EventSource(eventsUrl)
   events.addEventListener('message.created', (event) => {
     refresh()
     const payload = JSON.parse((event as MessageEvent<string>).data) as { public_id?: string }
