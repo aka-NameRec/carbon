@@ -20,6 +20,7 @@ class RebuildReport:
 
     added: int = 0
     updated: int = 0
+    removed: int = 0
     skipped: int = 0
     failed: list[str] = field(default_factory=list)
 
@@ -81,21 +82,42 @@ def load_records(root: Path, report: RebuildReport) -> list[VaultRecord]:
     return records
 
 
+def collect_present_ids(root: Path) -> set[str]:
+    """Return public_ids of all non-temporary Markdown files (active and trash).
+
+    Presence is derived from the file name so that a corrupted-but-existing
+    canonical file still counts as present and never triggers a prune.
+    """
+
+    present: set[str] = set()
+    for path in root.rglob("*.md"):
+        if path.name.startswith(".carbon-tmp-"):
+            continue
+        if PUBLIC_ID_PATTERN.fullmatch(path.stem):
+            present.add(path.stem)
+    return present
+
+
 async def rebuild_projection(
     repository: MessageRepository, root: Path, dry_run: bool
 ) -> RebuildReport:
-    """Scan vault and, unless dry-run, upsert every valid record into PostgreSQL."""
+    """Scan vault, upsert valid records, and prune projection rows without a file."""
 
     report = RebuildReport()
     records = load_records(root, report)
+    present_ids = collect_present_ids(root)
+    orphan_ids = set(await repository.list_public_ids()) - present_ids
     if dry_run:
         report.added = len(records)
+        report.removed = len(orphan_ids)
         return report
     for record in records:
         if await repository.upsert_rebuild_record(record):
             report.added += 1
         else:
             report.updated += 1
+    if orphan_ids:
+        report.removed = await repository.delete_public_ids(sorted(orphan_ids))
     return report
 
 

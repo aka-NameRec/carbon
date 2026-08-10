@@ -26,7 +26,7 @@ from carbon_backend.errors import ApiError, api_error_handler
 from carbon_backend.events import EventBroker
 from carbon_backend.logging import configure_logging
 from carbon_backend.repositories.messages import MessageRepository
-from carbon_backend.services.rebuild import RebuildReport, rebuild_projection, scan_vault
+from carbon_backend.services.rebuild import RebuildReport, rebuild_projection
 
 logger = logging.getLogger(__name__)
 
@@ -90,20 +90,17 @@ def run() -> None:
         print(create_token(settings.token_file, arguments.scope, arguments.source))
         return
     if arguments.command == "index" and arguments.index_command == "rebuild":
-        if arguments.dry_run:
-            report = scan_vault(settings.vault_root)
-        else:
 
-            async def rebuild() -> RebuildReport:
-                engine = create_database_engine(settings.database_dsn)
-                try:
-                    return await rebuild_projection(
-                        MessageRepository(engine), settings.vault_root, False
-                    )
-                finally:
-                    await engine.dispose()
+        async def rebuild() -> RebuildReport:
+            engine = create_database_engine(settings.database_dsn)
+            try:
+                return await rebuild_projection(
+                    MessageRepository(engine), settings.vault_root, arguments.dry_run
+                )
+            finally:
+                await engine.dispose()
 
-            report = asyncio.run(rebuild())
+        report = asyncio.run(rebuild())
         print(json.dumps(asdict(report), ensure_ascii=False))
         return
     uvicorn.run(app, host=settings.bind_host, port=settings.bind_port)

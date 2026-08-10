@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncTransaction
 
@@ -95,6 +95,25 @@ class MessageRepository:
                 },
             )
             return bool(result.scalar_one())
+
+    async def list_public_ids(self) -> list[str]:
+        """Return every public_id currently projected in PostgreSQL."""
+
+        async with self._engine.connect() as connection:
+            result = await connection.execute(text("SELECT public_id FROM messages"))
+            return [str(row[0]) for row in result.all()]
+
+    async def delete_public_ids(self, public_ids: list[str]) -> int:
+        """Delete projection rows by public_id and return the number removed."""
+
+        if not public_ids:
+            return 0
+        statement = text("DELETE FROM messages WHERE public_id IN :public_ids").bindparams(
+            bindparam("public_ids", expanding=True)
+        )
+        async with self._engine.begin() as connection:
+            result = await connection.execute(statement, {"public_ids": public_ids})
+            return result.rowcount or 0
 
     async def list_active(
         self,
