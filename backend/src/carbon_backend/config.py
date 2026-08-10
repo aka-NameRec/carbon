@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     bind_port: int = Field(default=8000, ge=1, le=65535)
     log_level: str = "INFO"
     api_prefix: str = "/api/v1"
+    cors_origins: list[str] = ["*"]
 
     @field_validator("database_dsn")
     @classmethod

@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import uvicorn
 from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.middleware.base import RequestResponseEndpoint
 
@@ -52,6 +53,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application = FastAPI(title="carbon-backend", version="0.1.0", lifespan=lifespan)
     application.add_exception_handler(ApiError, api_error_handler)
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=runtime_settings.cors_origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @application.middleware("http")
     async def attach_request_id(request: Request, call_next: RequestResponseEndpoint) -> Response:
