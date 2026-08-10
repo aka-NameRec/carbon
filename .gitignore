@@ -32,3 +32,6 @@ frontend/test-results/
 
 # Local service data
 context_portal/
+
+# Nested sibling repositories (tracked in their own remotes)
+client/
