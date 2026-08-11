@@ -21,10 +21,8 @@ export interface MessageFilters {
   unread?: boolean
 }
 const base = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000/api/v1'
-const token = import.meta.env.VITE_VIEWER_TOKEN ?? ''
-const headers = () => ({ Authorization: `Bearer ${token}` })
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(`${base}${path}`, { ...init, headers: { ...headers(), ...init?.headers } })
+  const r = await fetch(`${base}${path}`, init)
   if (!r.ok) throw new Error(`API request failed: ${r.status}`)
   return r.status === 204 ? (undefined as T) : (r.json() as Promise<T>)
 }

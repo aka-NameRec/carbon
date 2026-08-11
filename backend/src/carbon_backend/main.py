@@ -20,7 +20,6 @@ from starlette.middleware.base import RequestResponseEndpoint
 from carbon_backend.api.events import router as events_router
 from carbon_backend.api.health import router as health_router
 from carbon_backend.api.messages import router as messages_router
-from carbon_backend.auth.tokens import create_token
 from carbon_backend.config import Settings, get_settings
 from carbon_backend.database import create_database_engine
 from carbon_backend.errors import ApiError, api_error_handler
@@ -83,19 +82,11 @@ def run() -> None:
     settings = get_settings()
     parser = ArgumentParser(prog="carbon-backend")
     subparsers = parser.add_subparsers(dest="command")
-    token_parser = subparsers.add_parser("token")
-    token_subparsers = token_parser.add_subparsers(dest="token_command")
-    create_parser = token_subparsers.add_parser("create")
-    create_parser.add_argument("--scope", choices=("producer", "viewer", "admin"), required=True)
-    create_parser.add_argument("--source")
     index_parser = subparsers.add_parser("index")
     index_subparsers = index_parser.add_subparsers(dest="index_command")
     rebuild_parser = index_subparsers.add_parser("rebuild")
     rebuild_parser.add_argument("--dry-run", action="store_true")
     arguments = parser.parse_args()
-    if arguments.command == "token" and arguments.token_command == "create":
-        print(create_token(settings.token_file, arguments.scope, arguments.source))
-        return
     if arguments.command == "index" and arguments.index_command == "rebuild":
 
         async def rebuild() -> RebuildReport:

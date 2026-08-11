@@ -70,13 +70,13 @@ PATCH нужен для ручной коррекции сообщения из 
 }
 ```
 
-`code` стабилен и пригоден для frontend; `message` безопасен; `details` не содержит секретов, SQL, stack trace или полного текста сообщения без необходимости; `request_id` попадает в структурированные логи. Минимальные коды: `validation_error`, `authentication_required`, `forbidden`, `not_found`, `conflict`, `payload_too_large`, `storage_error`, `projection_error`, `internal_error`.
+`code` стабилен и пригоден для frontend; `message` безопасен; `details` не содержит секретов, SQL, stack trace или полного текста сообщения без необходимости; `request_id` попадает в структурированные логи. Минимальные коды: `validation_error`, `not_found`, `conflict`, `payload_too_large`, `storage_error`, `projection_error`, `internal_error`.
 
 ## Авторизация
 
-Токены — локальные API-токены Carbon, не LLM-токены. Они нужны producers для POST, viewer для чтения/поиска/SSE и admin для rebuild/reconciliation.
+Токенная аутентификация удалена (см. `docs/decisions/2026-08-11-local-only-auth-removal.md`): Carbon — local-only, backend слушает только `127.0.0.1`, а защитой от drive-by/DNS-rebinding служит CORS origin-allowlist (`DEFAULT_CORS_ORIGINS`: webview-origins), а не bearer-токены. Producer, viewer и SSE endpoints открыты; токен в frontend-bundle секретом не являлся.
 
-Токены генерируются backend CLI, raw value показывается только при создании, в файле вне Git хранятся hash токена, scope, producer/source и metadata. Файл имеет mode `0600`; raw token не логируется. Каждый producer получает отдельный token. Backend по умолчанию слушает `127.0.0.1`.
+Per-source token scoping (`principal.source`) удалён вместе с токенами; любой локальный producer может регистрировать любой source. План восстановления source-scoping зафиксирован в decision record выше и применяется, если появятся producer-ы разного уровня доверия.
 
 ## Frontmatter и Markdown
 

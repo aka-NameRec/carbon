@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -23,21 +20,8 @@ from carbon_backend.services.rebuild import rebuild_projection
 async def test_registration_creates_one_projection_and_one_vault_file(tmp_path: Path) -> None:
     """A duplicate producer key returns the original resource without another file."""
 
-    raw_token = "test-producer-token"
-    viewer_token = "test-viewer-token"
-    token_file = tmp_path / "tokens.json"
-    token_file.write_text(
-        json.dumps(
-            [
-                {"hash": hashlib.sha256(raw_token.encode()).hexdigest(), "scope": "producer"},
-                {"hash": hashlib.sha256(viewer_token.encode()).hexdigest(), "scope": "viewer"},
-            ]
-        ),
-        encoding="utf-8",
-    )
-    os.chmod(token_file, 0o600)
     vault_root = tmp_path / "Notifications"
-    settings = Settings(vault_root=vault_root, token_file=token_file)
+    settings = Settings(vault_root=vault_root)
     app = create_app(settings)
     deduplication_key = f"test-{uuid4().hex}"
     payload = {
@@ -52,12 +36,8 @@ async def test_registration_creates_one_projection_and_one_vault_file(tmp_path: 
     async with app.router.lifespan_context(app):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            first = await client.post(
-                "/api/v1/messages", json=payload, headers={"Authorization": f"Bearer {raw_token}"}
-            )
-            replay = await client.post(
-                "/api/v1/messages", json=payload, headers={"Authorization": f"Bearer {raw_token}"}
-            )
+            first = await client.post("/api/v1/messages", json=payload)
+            replay = await client.post("/api/v1/messages", json=payload)
             russian_deduplication_key = f"test-{uuid4().hex}"
             russian = await client.post(
                 "/api/v1/messages",
@@ -67,27 +47,21 @@ async def test_registration_creates_one_projection_and_one_vault_file(tmp_path: 
                     "title": f"Новое уведомление {russian_deduplication_key}",
                     "deduplication_key": russian_deduplication_key,
                 },
-                headers={"Authorization": f"Bearer {raw_token}"},
             )
             public_id = first.json()["public_id"]
             russian_public_id = russian.json()["public_id"]
-            viewer_headers = {"Authorization": f"Bearer {viewer_token}"}
-            listed = await client.get("/api/v1/messages", headers=viewer_headers)
-            search = await client.get(
-                "/api/v1/messages/search", params={"q": "Registration"}, headers=viewer_headers
-            )
+            listed = await client.get("/api/v1/messages")
+            search = await client.get("/api/v1/messages/search", params={"q": "Registration"})
             russian_search = await client.get(
-                "/api/v1/messages/search", params={"q": "уведомления"}, headers=viewer_headers
+                "/api/v1/messages/search", params={"q": "уведомления"}
             )
             trigram_search = await client.get(
-                "/api/v1/messages/search", params={"q": "tg-mo"}, headers=viewer_headers
+                "/api/v1/messages/search", params={"q": "tg-mo"}
             )
-            marked_read = await client.post(
-                f"/api/v1/messages/{public_id}/read", headers=viewer_headers
-            )
-            detail = await client.get(f"/api/v1/messages/{public_id}", headers=viewer_headers)
-            deleted = await client.delete(f"/api/v1/messages/{public_id}", headers=viewer_headers)
-            listed_after_delete = await client.get("/api/v1/messages", headers=viewer_headers)
+            marked_read = await client.post(f"/api/v1/messages/{public_id}/read")
+            detail = await client.get(f"/api/v1/messages/{public_id}")
+            deleted = await client.delete(f"/api/v1/messages/{public_id}")
+            listed_after_delete = await client.get("/api/v1/messages")
 
     engine = create_database_engine(settings.database_dsn)
     try:

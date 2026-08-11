@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -91,15 +88,8 @@ async def test_rebuild_prunes_projection_rows_without_canonical_file(
     orphans (run rebuild first on a drifted database).
     """
 
-    raw_token = "test-producer-token"
-    token_file = tmp_path / "tokens.json"
-    token_file.write_text(
-        json.dumps([{"hash": hashlib.sha256(raw_token.encode()).hexdigest(), "scope": "producer"}]),
-        encoding="utf-8",
-    )
-    os.chmod(token_file, 0o600)
     vault_root = tmp_path / "Notifications"
-    settings = Settings(vault_root=vault_root, token_file=token_file)
+    settings = Settings(vault_root=vault_root)
     app = create_app(settings)
     payload = {
         "source": "test-source",
@@ -112,11 +102,7 @@ async def test_rebuild_prunes_projection_rows_without_canonical_file(
     async with app.router.lifespan_context(app):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            created = await client.post(
-                "/api/v1/messages",
-                json=payload,
-                headers={"Authorization": f"Bearer {raw_token}"},
-            )
+            created = await client.post("/api/v1/messages", json=payload)
 
     public_id = created.json()["public_id"]
     canonical = vault_root / "2026" / "08" / f"{public_id}.md"

@@ -37,7 +37,7 @@ carbon — источник истины для контракта продюс�
 
 ## Токены
 
-Каждый продюсер — собственный producer-токен, желательно **source-scoped**. Токен хранит consumer (env/secret); в carbon лежат только хэши (`~/.config/carbon/tokens.json`).
+Backend carbon — local-only и не требует токенов (см. `docs/decisions/2026-08-11-local-only-auth-removal.md`); CORS origin-allowlist защищает от drive-by. `carbon-client` принимает опциональный `token` (`str | None`): если передан — добавляется заголовок `Authorization: Bearer …`, если нет — запрос идёт без auth. Это сохраняет совместимость, если на backend позже вернётся опциональный producer-token для source-scoping.
 
 ## Установка для consumer-ов
 
@@ -50,7 +50,7 @@ uv add "carbon-client @ git+https://github.com/aka-NameRec/carbon-client.git"
 ```bash
 cd carbon/client
 uv sync
-CARBON_CONTRACT_TOKEN=<producer-token> uv run pytest
+uv run pytest
 ```
 
 ## Caveat

@@ -1,7 +1,8 @@
 # CORS и аутентификация SSE для локального frontend
 
 Дата: 2026-08-11
-Статус: Принято
+Статус: Частично superseded
+Superseded by: `2026-08-11-local-only-auth-removal.md` (auth-часть: SSE-токен, `viewer_principal`, `?token=`). CORS-часть актуальна с поправкой: default `cors_origins` изменён с `["*"]` на webview-allowlist.
 Задача: `0tjkty7`
 Связано: `docs/architecture/2026-08-11-carbon-client.md`
 

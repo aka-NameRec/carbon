@@ -2,7 +2,7 @@
 
 ## Ownership
 
-`carbon-backend` owns validation, message identity, Markdown vault writes, PostgreSQL projection, HTTP API, CLI rebuild/reconciliation, authentication and SSE notifications.
+`carbon-backend` owns validation, message identity, Markdown vault writes, PostgreSQL projection, HTTP API, CLI rebuild/reconciliation and SSE notifications.
 
 ## Non-goals
 
@@ -14,8 +14,8 @@
 
 ## Inputs
 
-- authenticated producer JSON requests;
-- authenticated viewer/admin HTTP requests;
+- producer JSON requests;
+- viewer HTTP requests;
 - Markdown files under the configured `Notifications` root for rebuild;
 - PostgreSQL connection to the Carbon database.
 
@@ -35,7 +35,7 @@
 4. File writes are atomic; temporary files are never indexed.
 5. PostgreSQL is rebuildable from valid active/trash Markdown files.
 6. The frontend never bypasses the backend API.
-7. Secrets, tokens and message contents are absent from ordinary diagnostic logs.
+7. Message contents are absent from ordinary diagnostic logs.
 8. FTS projection changes in the same PostgreSQL transaction as the message row.
 
 ## Dependencies
@@ -43,8 +43,7 @@
 - FastAPI/Pydantic;
 - SQLAlchemy async/Psycopg 3;
 - PostgreSQL 18 with `pg_trgm` and required text-search support;
-- configured Obsidian vault;
-- local token file with mode `0600`.
+- configured Obsidian vault.
 
 ## Failure boundaries
 
@@ -55,6 +54,6 @@ Filesystem and PostgreSQL are separate transaction domains. The backend must use
 - unit tests for normalization, IDs, serialization and plain-text extraction;
 - integration tests against PostgreSQL for constraints, FTS trigger and transactions;
 - filesystem failure tests for write, fsync, rename and restore;
-- API tests for auth, idempotency, PATCH restrictions and error envelope;
+- API tests for idempotency, PATCH restrictions and error envelope;
 - rebuild tests from clean and partially corrupted vaults.
 

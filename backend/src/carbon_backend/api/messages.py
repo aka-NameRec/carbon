@@ -5,13 +5,11 @@ from __future__ import annotations
 import base64
 import json
 from datetime import datetime
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Query, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
-from carbon_backend.auth.tokens import TokenPrincipal, authenticate
 from carbon_backend.domain.messages import ProducerMessage
 from carbon_backend.errors import ApiError
 from carbon_backend.repositories.messages import MessageRepository
@@ -62,40 +60,6 @@ class MessageListResponse(BaseModel):
     unread_count: int
 
 
-def producer_principal(
-    request: Request, authorization: str | None = Header(default=None)
-) -> TokenPrincipal:
-    """Require a local producer bearer token."""
-
-    if authorization is None or not authorization.startswith("Bearer "):
-        raise ApiError(
-            status_code=401, code="authentication_required", message="Authentication required"
-        )
-    return authenticate(
-        request.app.state.settings.token_file, authorization.removeprefix("Bearer "), "producer"
-    )
-
-
-ProducerPrincipal = Annotated[TokenPrincipal, Depends(producer_principal)]
-
-
-def viewer_principal(
-    request: Request, authorization: str | None = Header(default=None)
-) -> TokenPrincipal:
-    """Require a local viewer bearer token."""
-
-    if authorization is None or not authorization.startswith("Bearer "):
-        raise ApiError(
-            status_code=401, code="authentication_required", message="Authentication required"
-        )
-    return authenticate(
-        request.app.state.settings.token_file, authorization.removeprefix("Bearer "), "viewer"
-    )
-
-
-ViewerPrincipal = Annotated[TokenPrincipal, Depends(viewer_principal)]
-
-
 def _decode_cursor(value: str | None) -> tuple[datetime | None, str | None]:
     if value is None:
         return None, None
@@ -116,7 +80,6 @@ def _encode_cursor(item: MessageSummary) -> str:
 @router.get("/search", response_model=SearchResponse)
 async def search_messages(
     request: Request,
-    _: ViewerPrincipal,
     q: str = Query(min_length=1, max_length=500),
     limit: int = Query(default=50, ge=1, le=100),
     cursor: str | None = None,
@@ -135,7 +98,6 @@ async def search_messages(
 @router.get("", response_model=MessageListResponse)
 async def list_messages(
     request: Request,
-    _: ViewerPrincipal,
     limit: int = Query(default=50, ge=1, le=100),
     cursor: str | None = None,
     source: str | None = Query(default=None, min_length=1, max_length=32),
@@ -155,7 +117,7 @@ async def list_messages(
 
 
 @router.get("/{public_id}", response_model=MessageDetail)
-async def get_message(public_id: str, request: Request, _: ViewerPrincipal) -> MessageDetail:
+async def get_message(public_id: str, request: Request) -> MessageDetail:
     """Return one active message."""
 
     message = await MessageRepository(request.app.state.engine).get_active(public_id)
@@ -165,7 +127,7 @@ async def get_message(public_id: str, request: Request, _: ViewerPrincipal) -> M
 
 
 @router.post("/{public_id}/read", status_code=204)
-async def mark_read(public_id: str, request: Request, _: ViewerPrincipal) -> Response:
+async def mark_read(public_id: str, request: Request) -> Response:
     """Mark an active message as read."""
 
     service = LifecycleService(
@@ -179,7 +141,7 @@ async def mark_read(public_id: str, request: Request, _: ViewerPrincipal) -> Res
 
 
 @router.post("/{public_id}/unread", status_code=204)
-async def mark_unread(public_id: str, request: Request, _: ViewerPrincipal) -> Response:
+async def mark_unread(public_id: str, request: Request) -> Response:
     """Mark an active message as unread."""
 
     service = LifecycleService(
@@ -193,7 +155,7 @@ async def mark_unread(public_id: str, request: Request, _: ViewerPrincipal) -> R
 
 
 @router.delete("/{public_id}", status_code=204)
-async def delete_message(public_id: str, request: Request, _: ViewerPrincipal) -> Response:
+async def delete_message(public_id: str, request: Request) -> Response:
     """Recoverably delete one message by moving its canonical file to trash."""
 
     service = LifecycleService(
@@ -211,14 +173,14 @@ async def register_message(
     payload: ProducerMessage,
     response: Response,
     request: Request,
-    principal: ProducerPrincipal,
 ) -> RegistrationResponse:
-    """Register one authenticated producer message."""
+    """Register one producer message.
 
-    if principal.source is not None and principal.source != payload.source:
-        raise ApiError(
-            status_code=403, code="forbidden", message="Token cannot register this source"
-        )
+    The API is local-only and protected by CORS origin checking, so the producer
+    endpoint requires no bearer token. Per-source token scoping was removed with
+    the token store; see ``docs/decisions/2026-08-11-local-only-auth-removal.md``.
+    """
+
     service = RegistrationService(
         MessageRepository(request.app.state.engine),
         VaultStorage(request.app.state.settings.vault_root),

@@ -8,6 +8,15 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Origins trusted to call the local-only API. After removing token auth, CORS
+# origin checking is the drive-by / DNS-rebinding defense, so the wildcard is
+# replaced by the actual webview origins (Vite dev + Tauri prod on each OS).
+DEFAULT_CORS_ORIGINS = [
+    "http://localhost:5173",
+    "tauri://localhost",
+    "https://tauri.localhost",
+]
+
 
 class Settings(BaseSettings):
     """Runtime settings for carbon-backend."""
@@ -22,12 +31,11 @@ class Settings(BaseSettings):
 
     database_dsn: str = "postgresql+psycopg://carbon@127.0.0.1:5433/carbon"
     vault_root: Path = Path("~/.my-links/logs-obsidian/carbon/Notifications")
-    token_file: Path = Path("~/.config/carbon/tokens.json")
     bind_host: str = "127.0.0.1"
     bind_port: int = Field(default=8000, ge=1, le=65535)
     log_level: str = "INFO"
     api_prefix: str = "/api/v1"
-    cors_origins: list[str] = ["*"]
+    cors_origins: list[str] = DEFAULT_CORS_ORIGINS
 
     @field_validator("database_dsn")
     @classmethod
@@ -36,7 +44,7 @@ class Settings(BaseSettings):
             raise ValueError("database_dsn must use the postgresql+psycopg dialect")
         return value
 
-    @field_validator("vault_root", "token_file")
+    @field_validator("vault_root")
     @classmethod
     def normalize_path(cls, value: Path) -> Path:
         return value.expanduser().resolve()
