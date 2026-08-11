@@ -11,7 +11,7 @@ Backlog carbon: технический долг и планируемые фич
 |---|---|---|
 | `0tjkv9g` | Строгое DI в backend (минимум — БД), инструмент вне FastAPI | средний |
 | `0tjkvjh` | Команды запуска backend/frontend (task runner) — **выполнено** (`just` + justfile, см. README) | средний |
-| `0tjkx14` | Severity (highest/high/medium/low) + отражение в tray | средний-высокий |
+| `0tjkx14` | Severity (highest/high/medium/low) + отражение в tray — **выполнено** | средний-высокий |
 | `0tjkwtn` | Табличное представление сообщений | средний-высокий |
 | `0tjkxay` | Layout: таблица 2/3 + область чтения 1/3 + разделитель | средний |
 | `0tjkxh0` | Поиск по нескольким словам (векторный?) | средний |
@@ -75,9 +75,11 @@ Backlog carbon: технический долг и планируемые фич
 
 ---
 
-## `0tjkx14` — Severity (highest/high/medium/low)
+## `0tjkx14` — Severity (highest/high/medium/low) (ВЫПОЛНЕНО)
 
-### Требования
+**Статус:** выполнено (2026-08-11). Поле `severity` (`highest`/`high`/`medium`/`low`, default `medium`)贯穿 domain → vault frontmatter → DB (миграция `20260811_01`) → API → carbon-client → frontend. Tray: непрочитанное `high`/`highest` → состояние `important` (переиспользует error-иконку). Severity — метаданные, не входит в `canonical_payload` (identity/hash стабильны). Проверено: 19 pytest, ruff, mypy, vue-tsc, cargo check.
+
+### Требования (исходные)
 - Поле `severity` со значениями `highest`, `high`, `medium`, `low` (порядок: highest > high > medium > low). *(Примечание: в исходной формулировке были опечатки «highgest»/«hight» — нормализовано.)*
 - Если есть хотя бы одно **непрочитанное** сообщение с `severity > medium` (т.е. `high`/`highest`) — значок tray должен это отражать (отдельное состояние/иконка для «важные непрочитанные»).
 

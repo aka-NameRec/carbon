@@ -2,6 +2,7 @@ export interface Message {
   public_id: string
   source: string
   title: string
+  severity: string
   occurred_at: string
   received_at: string
   read_at: string | null
@@ -14,6 +15,7 @@ export interface MessagePage {
   items: Message[]
   next_cursor: string | null
   unread_count: number
+  unread_important_count: number
 }
 
 export interface MessageFilters {

@@ -23,7 +23,8 @@ fn set_tray_state(app: tauri::AppHandle, state: String) -> Result<(), String> {
     let icon_bytes = match state.as_str() {
         "idle" => IDLE_ICON,
         "unread" => UNREAD_ICON,
-        "error" => ERROR_ICON,
+        // "important" reuses the error icon: an unread high/highest message demands attention.
+        "important" | "error" => ERROR_ICON,
         _ => return Err(format!("unsupported tray state: {state}")),
     };
     let icon = Image::from_bytes(icon_bytes).map_err(|error| error.to_string())?;

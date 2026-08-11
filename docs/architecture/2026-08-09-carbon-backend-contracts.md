@@ -91,6 +91,7 @@ schema_version: 1
 public_id: td9x8k-tg-mon-3m8v1qa7
 source: tg-mon
 title: Вас упомянули в Telegram
+severity: medium
 occurred_at: 2026-08-09T07:42:18Z
 received_at: 2026-08-09T07:42:21Z
 read_at:
@@ -108,7 +109,7 @@ content_hash: "..."
 
 ## PostgreSQL projection
 
-Минимальные поля `messages`: `id`, `public_id`, `source`, `source_event_id`, `title`, `occurred_at`, `received_at`, `read_at`, `deleted_at`, `deduplication_key`, `tags`, `file_path`, `body_markdown`, `search_text`, `content_hash`, `schema_version`, `search_vector`, `created_at`, `updated_at`. `tags` имеет тип `text[] NOT NULL DEFAULT '{}'` и GIN-индекс: это обеспечивает фильтрацию нормализованных тегов без отдельной реляционной модели в MVP.
+Минимальные поля `messages`: `id`, `public_id`, `source`, `source_event_id`, `title`, `severity`, `occurred_at`, `received_at`, `read_at`, `deleted_at`, `deduplication_key`, `tags`, `file_path`, `body_markdown`, `search_text`, `content_hash`, `schema_version`, `search_vector`, `created_at`, `updated_at`. `severity` — `text NOT NULL DEFAULT 'medium'` с CHECK на `highest`/`high`/`medium`/`low`. `tags` имеет тип `text[] NOT NULL DEFAULT '{}'` и GIN-индекс: это обеспечивает фильтрацию нормализованных тегов без отдельной реляционной модели в MVP.
 
 `search_vector` обновляется PostgreSQL trigger-ом в той же транзакции, что и row change. Trigger объединяет weighted vectors: title/source — weight A, body — weight B; title/body индексируются русской и английской конфигурациями, source — `simple`. `pg_trgm` используется отдельными GIN-индексами. Embeddings и vector-колонки Carbon MVP не использует, несмотря на наличие pgvector в development image.
 

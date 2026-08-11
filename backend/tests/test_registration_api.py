@@ -71,6 +71,8 @@ async def test_registration_creates_one_projection_and_one_vault_file(tmp_path: 
         assert replay.headers["X-Idempotent-Replay"] == "true"
         assert replay.json() == first.json()
         assert listed.status_code == 200
+        # Default severity is medium, so no message counts as important.
+        assert listed.json()["unread_important_count"] == 0
         assert search.status_code == 200
         assert search.json()["items"][0]["public_id"] == public_id
         assert russian_search.json()["items"][0]["source"] == "tg-mon"
@@ -98,5 +100,47 @@ async def test_registration_creates_one_projection_and_one_vault_file(tmp_path: 
             await connection.execute(
                 text("DELETE FROM messages WHERE public_id IN (:test_id, :russian_id)"),
                 {"test_id": public_id, "russian_id": russian_public_id},
+            )
+        await engine.dispose()
+
+
+@pytest.mark.integration
+async def test_high_severity_drives_important_unread_indicator(tmp_path: Path) -> None:
+    """An unread high-severity message is reflected in unread_important_count."""
+
+    vault_root = tmp_path / "Notifications"
+    settings = Settings(vault_root=vault_root)
+    app = create_app(settings)
+    stamp = uuid4().hex
+    payload = {
+        "source": "test-source",
+        "title": f"Important {stamp}",
+        "occurred_at": "2026-08-09T07:42:18Z",
+        "body": "body",
+        "deduplication_key": f"high-{stamp}",
+        "severity": "high",
+    }
+
+    async with app.router.lifespan_context(app):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            created = await client.post("/api/v1/messages", json=payload)
+            public_id = created.json()["public_id"]
+            listed = await client.get("/api/v1/messages")
+            detail = await client.get(f"/api/v1/messages/{public_id}")
+
+    engine = create_database_engine(settings.database_dsn)
+    try:
+        assert created.status_code == 201
+        listed_body = listed.json()
+        assert listed_body["unread_count"] == 1
+        assert listed_body["unread_important_count"] == 1
+        assert listed_body["items"][0]["severity"] == "high"
+        assert detail.json()["severity"] == "high"
+    finally:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM messages WHERE public_id = :public_id"),
+                {"public_id": public_id},
             )
         await engine.dispose()

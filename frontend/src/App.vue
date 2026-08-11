@@ -12,6 +12,7 @@ import {
   notifyAboutNewMessage,
   openExternalUrl,
   setTrayState,
+  type TrayState,
 } from './desktop'
 
 const queryClient = useQueryClient()
@@ -45,6 +46,9 @@ const search = useQuery({
 const listItems = computed(() => list.data.value?.pages.flatMap((page) => page.items) ?? [])
 const items = computed(() => (query.value ? (search.data.value?.items ?? []) : listItems.value))
 const unreadCount = computed(() => list.data.value?.pages[0]?.unread_count ?? 0)
+const unreadImportantCount = computed(
+  () => list.data.value?.pages[0]?.unread_important_count ?? 0,
+)
 const listHasError = computed(() => list.isError.value || search.isError.value)
 const hasNextPage = computed(() => list.hasNextPage.value)
 const isFetchingNextPage = computed(() => list.isFetchingNextPage.value)
@@ -62,9 +66,16 @@ const action = useMutation({
 })
 
 watch(
-  [unreadCount, () => list.isError.value],
-  ([count, hasError]) => {
-    void setTrayState(hasError ? 'error' : count > 0 ? 'unread' : 'idle').catch(() => undefined)
+  [unreadImportantCount, unreadCount, () => list.isError.value],
+  ([important, count, hasError]) => {
+    const state: TrayState = hasError
+      ? 'error'
+      : important > 0
+        ? 'important'
+        : count > 0
+          ? 'unread'
+          : 'idle'
+    void setTrayState(state).catch(() => undefined)
   },
   { immediate: true },
 )

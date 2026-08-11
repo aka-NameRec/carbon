@@ -37,6 +37,7 @@
 6. The frontend never bypasses the backend API.
 7. Message contents are absent from ordinary diagnostic logs.
 8. FTS projection changes in the same PostgreSQL transaction as the message row.
+9. `severity` is constrained to `highest`/`high`/`medium`/`low` and defaults to `medium`; it is metadata and does not affect `content_hash` or `public_id`.
 
 ## Dependencies
 

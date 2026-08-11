@@ -9,7 +9,7 @@ import {
 } from '@tauri-apps/plugin-notification'
 
 type Unlisten = () => void
-export type TrayState = 'idle' | 'unread' | 'error'
+export type TrayState = 'idle' | 'unread' | 'important' | 'error'
 
 const PUBLIC_ID_PATTERN = /^[a-z0-9]+-[a-z0-9-]+-[a-z0-9]{8}$/
 const DEFAULT_ALLOWED_SCHEMES = ['https:', 'http:', 'tg:', 'obsidian:']

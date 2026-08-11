@@ -33,6 +33,7 @@ class RegistrationService:
             tags=tuple(message.tags),
             source_event_id=message.source_event_id,
             deduplication_key=message.deduplication_key,
+            severity=message.severity,
         )
         try:
             path = self._storage.write(vault_message)

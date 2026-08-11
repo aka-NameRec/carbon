@@ -19,6 +19,12 @@ const groups = computed(() => {
 function localTime(timestamp: string): string {
   return new Date(timestamp).toLocaleString()
 }
+
+function severityBadge(severity: string): string {
+  if (severity === 'highest') return '!!'
+  if (severity === 'high') return '!'
+  return ''
+}
 </script>
 
 <template>
@@ -35,7 +41,15 @@ function localTime(timestamp: string): string {
         :class="{ selected: message.public_id === selectedId, unread: !message.read_at }"
         @click="$emit('select', message.public_id)"
       >
-        <strong>{{ message.title }}</strong>
+        <strong
+          ><span
+            v-if="severityBadge(message.severity)"
+            class="severity"
+            :class="`severity-${message.severity}`"
+            :title="`Severity: ${message.severity}`"
+            >{{ severityBadge(message.severity) }}</span
+          >{{ message.title }}</strong
+        >
         <small
           >{{ localTime(message.received_at) }} · {{ message.read_at ? 'read' : 'unread' }}</small
         >
@@ -66,6 +80,17 @@ button {
 }
 .unread strong {
   font-weight: 800;
+}
+.severity {
+  display: inline-block;
+  margin-right: 0.3rem;
+  font-weight: 800;
+}
+.severity-highest {
+  color: #b91c1c;
+}
+.severity-high {
+  color: #c2410c;
 }
 small {
   display: block;

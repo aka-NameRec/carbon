@@ -25,6 +25,7 @@ function handleLink(event: MouseEvent): void {
 <template>
   <article v-if="message">
     <h2>{{ message.title }}</h2>
+    <p class="meta">Severity: {{ message.severity }}</p>
     <div class="message-body" @click="handleLink" v-html="renderedBody" />
     <button @click="$emit('read', message)">
       {{ message.read_at ? 'Mark unread' : 'Mark read' }}
@@ -38,6 +39,11 @@ function handleLink(event: MouseEvent): void {
 article {
   padding: 1rem;
   border: 1px solid #ddd;
+}
+.meta {
+  margin: 0 0 0.5rem;
+  color: #666;
+  font-size: 0.85rem;
 }
 .message-body :deep(pre) {
   overflow-x: auto;

@@ -36,6 +36,7 @@ class VaultMessage:
     deduplication_key: str | None = None
     read_at: datetime | None = None
     deleted_at: datetime | None = None
+    severity: str = "medium"
     schema_version: int = 1
 
 
@@ -49,6 +50,7 @@ def render_markdown(message: VaultMessage) -> str:
         "public_id": message.public_id,
         "source": message.source,
         "title": message.title,
+        "severity": message.severity,
         "occurred_at": _utc_iso(message.occurred_at),
         "received_at": _utc_iso(message.received_at),
         "read_at": _utc_iso(message.read_at),

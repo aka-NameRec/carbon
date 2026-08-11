@@ -95,5 +95,6 @@ class LifecycleService:
             deduplication_key=cast(str | None, row["deduplication_key"]),
             read_at=cast(datetime | None, read_at),
             deleted_at=deleted_at,
+            severity=cast(str, row["severity"]),
             schema_version=cast(int, row["schema_version"]),
         )

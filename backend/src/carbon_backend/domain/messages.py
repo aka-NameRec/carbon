@@ -13,6 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 SOURCE_PATTERN = re.compile(r"^[a-z0-9-]{1,32}$")
 HTML_TAG_PATTERN = re.compile(r"</?[A-Za-z][^>]*>")
 BASE36_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz"
+SEVERITY_LEVELS = ("highest", "high", "medium", "low")
+SEVERITY_DEFAULT = "medium"
 
 
 def _utc_iso(value: datetime) -> str:
@@ -41,6 +43,16 @@ class ProducerMessage(BaseModel):
     source_event_id: str | None = Field(default=None, max_length=500)
     deduplication_key: str | None = Field(default=None, max_length=500)
     tags: list[str] = Field(default_factory=list, max_length=32)
+    severity: str = Field(default=SEVERITY_DEFAULT)
+
+    @field_validator("severity")
+    @classmethod
+    def normalize_severity(cls, value: str) -> str:
+        if value not in SEVERITY_LEVELS:
+            raise ValueError(
+                f"severity must be one of {', '.join(SEVERITY_LEVELS)}"
+            )
+        return value
 
     @field_validator("source")
     @classmethod

@@ -32,6 +32,7 @@ class MessageSummary(BaseModel):
     public_id: str
     source: str
     title: str
+    severity: str
     occurred_at: datetime
     received_at: datetime
     read_at: datetime | None
@@ -53,11 +54,12 @@ class SearchResponse(BaseModel):
 
 
 class MessageListResponse(BaseModel):
-    """Cursor page of active messages and the global unread indicator."""
+    """Cursor page of active messages and the global unread indicators."""
 
     items: list[MessageSummary]
     next_cursor: str | None
     unread_count: int
+    unread_important_count: int
 
 
 def _decode_cursor(value: str | None) -> tuple[datetime | None, str | None]:
@@ -113,6 +115,7 @@ async def list_messages(
         items=items,
         next_cursor=_encode_cursor(items[-1]) if len(items) == limit else None,
         unread_count=await repository.unread_count(),
+        unread_important_count=await repository.unread_important_count(),
     )
 
 

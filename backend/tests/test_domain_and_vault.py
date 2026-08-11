@@ -5,7 +5,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from carbon_backend.domain.messages import (
+    SEVERITY_LEVELS,
     ProducerMessage,
     content_hash,
     markdown_to_plain_text,
@@ -33,9 +37,23 @@ def test_message_normalization_and_identity_are_deterministic() -> None:
     assert message.source == "tg-mon"
     assert message.occurred_at == datetime(2026, 8, 9, 9, 42, 18, tzinfo=UTC)
     assert message.tags == ["alerts", "telegram"]
+    assert message.severity == "medium"
     assert content_hash(message) == content_hash(message)
     assert public_id(message) == public_id(message)
     assert public_id(message, nonce=1) != public_id(message)
+
+
+def test_severity_defaults_to_medium_and_validates_levels() -> None:
+    """Severity defaults to medium and accepts only the four defined levels."""
+
+    assert _producer_message().severity == "medium"
+
+    fields = _producer_message().model_dump()
+    for level in SEVERITY_LEVELS:
+        assert ProducerMessage(**{**fields, "severity": level}).severity == level
+
+    with pytest.raises(ValidationError):
+        ProducerMessage(**{**fields, "severity": "urgent"})
 
 
 def test_markdown_plain_text_preserves_visible_content() -> None:

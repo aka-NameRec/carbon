@@ -19,6 +19,9 @@ class Message(Base):
     __tablename__ = "messages"
     __table_args__ = (
         CheckConstraint("source ~ '^[a-z0-9-]{1,32}$'", name="ck_messages_source_format"),
+        CheckConstraint(
+            "severity IN ('highest', 'high', 'medium', 'low')", name="ck_messages_severity"
+        ),
         Index("uq_messages_public_id", "public_id", unique=True),
         Index("uq_messages_file_path", "file_path", unique=True),
         Index(
@@ -77,6 +80,9 @@ class Message(Base):
     body_markdown: Mapped[str] = mapped_column(Text, nullable=False)
     search_text: Mapped[str] = mapped_column(Text, nullable=False)
     content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    severity: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'medium'")
+    )
     schema_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
     search_vector: Mapped[str] = mapped_column(TSVECTOR, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

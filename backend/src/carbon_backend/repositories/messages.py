@@ -62,10 +62,12 @@ class MessageRepository:
                 text("""
                 INSERT INTO messages (public_id, source, source_event_id, title, occurred_at,
                     received_at, read_at, deleted_at, deduplication_key, tags, file_path,
-                    body_markdown, search_text, content_hash, schema_version, search_vector)
+                    body_markdown, search_text, content_hash, severity, schema_version,
+                    search_vector)
                 VALUES (:public_id, :source, :source_event_id, :title, :occurred_at,
                     :received_at, :read_at, :deleted_at, :deduplication_key, :tags, :file_path,
-                    :body_markdown, :search_text, :content_hash, :schema_version, ''::tsvector)
+                    :body_markdown, :search_text, :content_hash, :severity, :schema_version,
+                    ''::tsvector)
                 ON CONFLICT (public_id) DO UPDATE SET source = EXCLUDED.source,
                     source_event_id = EXCLUDED.source_event_id, title = EXCLUDED.title,
                     occurred_at = EXCLUDED.occurred_at, received_at = EXCLUDED.received_at,
@@ -73,7 +75,7 @@ class MessageRepository:
                     deduplication_key = EXCLUDED.deduplication_key, tags = EXCLUDED.tags,
                     file_path = EXCLUDED.file_path, body_markdown = EXCLUDED.body_markdown,
                     search_text = EXCLUDED.search_text, content_hash = EXCLUDED.content_hash,
-                    schema_version = EXCLUDED.schema_version
+                    severity = EXCLUDED.severity, schema_version = EXCLUDED.schema_version
                 RETURNING xmax = 0 AS inserted
                 """),
                 {
@@ -91,6 +93,7 @@ class MessageRepository:
                     "body_markdown": record.body_markdown,
                     "search_text": markdown_to_plain_text(record.body_markdown),
                     "content_hash": data["content_hash"],
+                    "severity": data.get("severity", "medium"),
                     "schema_version": data["schema_version"],
                 },
             )
@@ -128,7 +131,7 @@ class MessageRepository:
         async with self._engine.connect() as connection:
             result = await connection.execute(
                 text("""
-                SELECT public_id, source, title, occurred_at, received_at, read_at, tags
+                SELECT public_id, source, title, severity, occurred_at, received_at, read_at, tags
                 FROM messages
                 WHERE deleted_at IS NULL
                   AND (CAST(:source AS text) IS NULL OR source = CAST(:source AS text))
@@ -160,6 +163,19 @@ class MessageRepository:
             )
             return int(result.scalar_one())
 
+    async def unread_important_count(self) -> int:
+        """Return the number of active unread high/highest messages."""
+
+        async with self._engine.connect() as connection:
+            result = await connection.execute(
+                text("""
+                SELECT count(*) FROM messages
+                WHERE deleted_at IS NULL AND read_at IS NULL
+                  AND severity IN ('high', 'highest')
+                """)
+            )
+            return int(result.scalar_one())
+
     async def search_active(
         self,
         query: str,
@@ -176,8 +192,8 @@ class MessageRepository:
                     SELECT websearch_to_tsquery('russian', :query) AS russian_query,
                            websearch_to_tsquery('english', :query) AS english_query
                 )
-                SELECT m.public_id, m.source, m.title, m.occurred_at, m.received_at, m.read_at,
-                       m.tags,
+                SELECT m.public_id, m.source, m.title, m.severity, m.occurred_at, m.received_at,
+                       m.read_at, m.tags,
                        GREATEST(ts_rank_cd(m.search_vector, q.russian_query),
                                 ts_rank_cd(m.search_vector, q.english_query),
                                 similarity(m.title, :query),
@@ -209,8 +225,8 @@ class MessageRepository:
         async with self._engine.connect() as connection:
             result = await connection.execute(
                 text("""
-                SELECT public_id, source, source_event_id, title, occurred_at, received_at,
-                       read_at, tags, body_markdown
+                SELECT public_id, source, source_event_id, title, severity, occurred_at,
+                       received_at, read_at, tags, body_markdown
                 FROM messages
                 WHERE public_id = :public_id AND deleted_at IS NULL
                 """),
@@ -240,8 +256,9 @@ class MessageRepository:
         transaction = await connection.begin()
         result = await connection.execute(
             text("""
-            SELECT public_id, source, source_event_id, title, occurred_at, received_at, read_at,
-                   deduplication_key, tags, file_path, body_markdown, content_hash, schema_version
+            SELECT public_id, source, source_event_id, title, severity, occurred_at,
+                   received_at, read_at, deduplication_key, tags, file_path, body_markdown,
+                   content_hash, schema_version
             FROM messages
             WHERE public_id = :public_id AND deleted_at IS NULL
             FOR UPDATE
@@ -301,11 +318,11 @@ class MessageRepository:
                 INSERT INTO messages (
                     public_id, source, source_event_id, title, occurred_at, received_at,
                     deduplication_key, tags, file_path, body_markdown, search_text,
-                    content_hash, search_vector
+                    content_hash, severity, search_vector
                 ) VALUES (
                     :public_id, :source, :source_event_id, :title, :occurred_at, :received_at,
                     :deduplication_key, :tags, :file_path, :body_markdown, :search_text,
-                    :content_hash, ''::tsvector
+                    :content_hash, :severity, ''::tsvector
                 )
                 """),
                 {
@@ -321,6 +338,7 @@ class MessageRepository:
                     "body_markdown": message.body,
                     "search_text": markdown_to_plain_text(message.body),
                     "content_hash": digest,
+                    "severity": message.severity,
                 },
             )
         except IntegrityError:
