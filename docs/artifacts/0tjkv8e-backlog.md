@@ -10,7 +10,7 @@ Backlog carbon: технический долг и планируемые фич
 | Задача | Тема | Приоритет |
 |---|---|---|
 | `0tjkv9g` | Строгое DI в backend (минимум — БД), инструмент вне FastAPI | средний |
-| `0tjkvjh` | Команды запуска backend/frontend (task runner) | средний |
+| `0tjkvjh` | Команды запуска backend/frontend (task runner) — **выполнено** (`just` + justfile, см. README) | средний |
 | `0tjkx14` | Severity (highest/high/medium/low) + отражение в tray | средний-высокий |
 | `0tjkwtn` | Табличное представление сообщений | средний-высокий |
 | `0tjkxay` | Layout: таблица 2/3 + область чтения 1/3 + разделитель | средний |
@@ -52,9 +52,11 @@ Backlog carbon: технический долг и планируемые фич
 
 ---
 
-## `0tjkvjh` — Команды запуска backend/frontend
+## `0tjkvjh` — Команды запуска backend/frontend (ВЫПОЛНЕНО)
 
-### Контекст
+**Статус:** выполнено (2026-08-11). Инструмент — `just` (justfile в корне репозитория). Recipes: `just dev` (backend+frontend параллельно, Ctrl+C гасит оба), `just backend`, `just frontend`, `just db-migrate`, `just backend-test/lint`, `just frontend-test/check`, `just client-test/lint`. Команды задокументированы в `README.md`. cwd-изоляция подтверждена (`just backend-lint`/`client-lint` зелёные из корня).
+
+### Контекст (исходный)
 Разработка требует запускать backend (`uv run carbon-backend` из `backend/`) и frontend (`pnpm exec tauri dev` из `frontend/`). Заходить в каталоги неудобно; хочется единый entrypoint вроде `make backend-start` / `frontend-stop` / `all-start`.
 
 ### Кандидаты на task runner (подтвердить при выполнении)
